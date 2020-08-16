@@ -1,11 +1,18 @@
+# Minimal
 click
 h11
 
 # Optional
-httptools
-uvloop>=0.14.0
+httptools; sys_platform != 'win32'
+uvloop>=0.14.0; sys_platform != 'win32'
 websockets==8.*
-wsproto==0.13.*
+wsproto==0.15.*
+watchgod>=0.6,<0.7
+python_dotenv==0.13.*
+
+# Packaging
+twine
+wheel
 
 # Testing
 autoflake
@@ -16,10 +23,9 @@ isort
 pytest
 pytest-cov
 requests
+seed-isort-config
 
 # Documentation
 mkdocs
 mkdocs-material
 
-# Efficient debug reload
-watchgod>=0.6,<0.7
