@@ -115,20 +115,6 @@ def create_ssl_context(
     return ctx
 
 
-def _get_server_start_message(is_ipv6_message: bool = False) -> Tuple[str, str]:
-    if is_ipv6_message:
-        ip_repr = "%s://[%s]:%d"
-    else:
-        ip_repr = "%s://%s:%d"
-    message = f"Uvicorn running on {ip_repr} (Press CTRL+C to quit)"
-    color_message = (
-        "Uvicorn running on "
-        + click.style(ip_repr, bold=True)
-        + " (Press CTRL+C to quit)"
-    )
-    return message, color_message
-
-
 class Config:
     def __init__(
         self,
@@ -169,6 +155,7 @@ class Config:
         ssl_ca_certs=None,
         ssl_ciphers="TLSv1",
         headers=None,
+        factory=False,
     ):
         self.app = app
         self.host = host
@@ -205,6 +192,7 @@ class Config:
         self.ssl_ciphers = ssl_ciphers
         self.headers = headers if headers else []  # type: List[str]
         self.encoded_headers = None  # type: List[Tuple[bytes, bytes]]
+        self.factory = factory
 
         self.loaded = False
         self.configure_logging()
@@ -322,6 +310,19 @@ class Config:
             logger.error("Error loading ASGI app. %s" % exc)
             sys.exit(1)
 
+        if self.factory:
+            try:
+                self.loaded_app = self.loaded_app()
+            except TypeError as exc:
+                logger.error("Error loading ASGI app factory: %s", exc)
+                sys.exit(1)
+        elif not inspect.signature(self.loaded_app).parameters:
+            logger.error(
+                "APP seems to be an application factory. "
+                "Run uvicorn with the --factory flag."
+            )
+            sys.exit(1)
+
         if self.interface == "auto":
             if inspect.isclass(self.loaded_app):
                 use_asgi_3 = hasattr(self.loaded_app, "__await__")
@@ -355,10 +356,15 @@ class Config:
             loop_setup()
 
     def bind_socket(self):
-        family, sockettype, proto, canonname, sockaddr = socket.getaddrinfo(
-            self.host, self.port, type=socket.SOCK_STREAM
-        )[0]
-        sock = socket.socket(family=family, type=sockettype)
+        family = socket.AF_INET
+        addr_format = "%s://%s:%d"
+
+        if self.host and ":" in self.host:
+            # It's an IPv6 address.
+            family = socket.AF_INET6
+            addr_format = "%s://[%s]:%d"
+
+        sock = socket.socket(family=family)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((self.host, self.port))
@@ -367,10 +373,12 @@ class Config:
             sys.exit(1)
         sock.set_inheritable(True)
 
-        if family == socket.AddressFamily.AF_INET6:
-            message, color_message = _get_server_start_message(is_ipv6_message=True)
-        else:
-            message, color_message = _get_server_start_message()
+        message = f"Uvicorn running on {addr_format} (Press CTRL+C to quit)"
+        color_message = (
+            "Uvicorn running on "
+            + click.style(addr_format, bold=True)
+            + " (Press CTRL+C to quit)"
+        )
         protocol_name = "https" if self.is_ssl else "http"
         logger.info(
             message,

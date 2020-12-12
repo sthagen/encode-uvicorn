@@ -5,11 +5,11 @@ from copy import deepcopy
 import pytest
 import yaml
 
-from uvicorn import protocols
 from uvicorn.config import LOGGING_CONFIG, Config
 from uvicorn.middleware.debug import DebugMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from uvicorn.middleware.wsgi import WSGIMiddleware
+from uvicorn.protocols.http.h11_impl import H11Protocol
 
 
 @pytest.fixture
@@ -32,11 +32,11 @@ def yaml_logging_config(logging_config):
     return yaml.dump(logging_config)
 
 
-async def asgi_app():
+async def asgi_app(scope, receive, send):
     pass  # pragma: nocover
 
 
-def wsgi_app():
+def wsgi_app(environ, start_response):
     pass  # pragma: nocover
 
 
@@ -71,10 +71,29 @@ def test_app_unimportable():
         config.load()
 
 
-def test_concrete_http_class():
-    config = Config(app=asgi_app, http=protocols.http.h11_impl.H11Protocol)
+def test_app_factory():
+    def create_app():
+        return asgi_app
+
+    config = Config(app=create_app, factory=True, proxy_headers=False)
     config.load()
-    assert config.http_protocol_class is protocols.http.h11_impl.H11Protocol
+    assert config.loaded_app is asgi_app
+
+    # Flag missing.
+    config = Config(app=create_app)
+    with pytest.raises(SystemExit):
+        config.load()
+
+    # App not a no-arguments callable.
+    config = Config(app=asgi_app, factory=True)
+    with pytest.raises(SystemExit):
+        config.load()
+
+
+def test_concrete_http_class():
+    config = Config(app=asgi_app, http=H11Protocol)
+    config.load()
+    assert config.http_protocol_class is H11Protocol
 
 
 def test_socket_bind():
