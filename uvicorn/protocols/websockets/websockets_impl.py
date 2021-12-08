@@ -1,8 +1,8 @@
 import asyncio
 import http
-import inspect
 import logging
-from typing import TYPE_CHECKING, Callable
+import sys
+from typing import Callable
 from urllib.parse import unquote
 
 import websockets
@@ -26,11 +26,7 @@ class Server:
 
 
 # special case logger kwarg in websockets >=10
-# https://github.com/aaugustin/websockets/issues/1021#issuecomment-886222136
-if (
-    TYPE_CHECKING
-    or "logger" in inspect.signature(websockets.WebSocketServerProtocol).parameters
-):
+if sys.version_info >= (3, 7):
 
     class _LoggerMixin:
         pass
@@ -265,7 +261,7 @@ class WebSocketProtocol(_LoggerMixin, websockets.WebSocketServerProtocol):
 
             elif message_type == "websocket.close":
                 code = message.get("code", 1000)
-                reason = message.get("reason", "")
+                reason = message.get("reason", "") or ""
                 await self.close(code, reason)
                 self.closed_event.set()
 
@@ -286,10 +282,17 @@ class WebSocketProtocol(_LoggerMixin, websockets.WebSocketServerProtocol):
             return {"type": "websocket.connect"}
 
         await self.handshake_completed_event.wait()
+
+        if self.closed_event.is_set():
+            # If client disconnected, use WebSocketServerProtocol.close_code property.
+            # If the handshake failed or the app closed before handshake completion,
+            # use 1006 Abnormal Closure.
+            return {"type": "websocket.disconnect", "code": self.close_code or 1006}
+
         try:
-            await self.ensure_open()
             data = await self.recv()
         except websockets.ConnectionClosed as exc:
+            self.closed_event.set()
             return {"type": "websocket.disconnect", "code": exc.code}
 
         msg = {"type": "websocket.receive"}
