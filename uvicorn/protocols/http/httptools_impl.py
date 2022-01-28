@@ -136,6 +136,8 @@ class HttpToolsProtocol(asyncio.Protocol):
             self.transport.close()
         except httptools.HttpParserUpgrade:
             self.handle_upgrade()
+        if data == b"" and not self.transport.is_closing():
+            self.transport.close()
 
     def handle_upgrade(self):
         upgrade_value = None
@@ -201,7 +203,7 @@ class HttpToolsProtocol(asyncio.Protocol):
         self.headers = []
         self.scope = {
             "type": "http",
-            "asgi": {"version": self.config.asgi_version, "spec_version": "2.1"},
+            "asgi": {"version": self.config.asgi_version, "spec_version": "2.3"},
             "http_version": "1.1",
             "server": self.server,
             "client": self.client,

@@ -13,7 +13,6 @@ from wsproto.utilities import RemoteProtocolError
 from uvicorn.logging import TRACE_LOG_LEVEL
 from uvicorn.protocols.utils import get_local_addr, get_remote_addr, is_ssl
 
-# Check wsproto version. We've build against 0.13. We don't know about 0.14 yet.
 assert wsproto.__version__ > "0.13", "Need wsproto version 0.13"
 
 
@@ -146,7 +145,7 @@ class WSProtocol(asyncio.Protocol):
         raw_path, _, query_string = event.target.partition("?")
         self.scope = {
             "type": "websocket",
-            "asgi": {"version": self.config.asgi_version, "spec_version": "2.1"},
+            "asgi": {"version": self.config.asgi_version, "spec_version": "2.3"},
             "http_version": "1.1",
             "scheme": self.scheme,
             "server": self.server,
