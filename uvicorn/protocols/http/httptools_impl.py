@@ -74,7 +74,6 @@ class HttpToolsProtocol(asyncio.Protocol):
         self.pipeline = deque()
 
         # Per-request state
-        self.url = None
         self.scope = None
         self.headers = None
         self.expect_100_continue = False
@@ -126,7 +125,8 @@ class HttpToolsProtocol(asyncio.Protocol):
         except httptools.HttpParserError as exc:
             msg = "Invalid HTTP request received."
             self.logger.warning(msg, exc_info=exc)
-            self.transport.close()
+            self.send_400_response(msg)
+            return
         except httptools.HttpParserUpgrade:
             self.handle_upgrade()
 
@@ -139,27 +139,12 @@ class HttpToolsProtocol(asyncio.Protocol):
         if upgrade_value != b"websocket" or self.ws_protocol_class is None:
             msg = "Unsupported upgrade request."
             self.logger.warning(msg)
-
             from uvicorn.protocols.websockets.auto import AutoWebSocketsProtocol
 
-            if AutoWebSocketsProtocol is None:
+            if AutoWebSocketsProtocol is None:  # pragma: no cover
                 msg = "No supported WebSocket library detected. Please use 'pip install uvicorn[standard]', or install 'websockets' or 'wsproto' manually."  # noqa: E501
                 self.logger.warning(msg)
-
-            content = [STATUS_LINE[400]]
-            for name, value in self.default_headers:
-                content.extend([name, b": ", value, b"\r\n"])
-            content.extend(
-                [
-                    b"content-type: text/plain; charset=utf-8\r\n",
-                    b"content-length: " + str(len(msg)).encode("ascii") + b"\r\n",
-                    b"connection: close\r\n",
-                    b"\r\n",
-                    msg.encode("ascii"),
-                ]
-            )
-            self.transport.write(b"".join(content))
-            self.transport.close()
+            self.send_400_response(msg)
             return
 
         if self.logger.level <= TRACE_LOG_LEVEL:
@@ -179,15 +164,25 @@ class HttpToolsProtocol(asyncio.Protocol):
         protocol.data_received(b"".join(output))
         self.transport.set_protocol(protocol)
 
-    # Parser callbacks
-    def on_url(self, url):
-        method = self.parser.get_method()
-        parsed_url = httptools.parse_url(url)
-        raw_path = parsed_url.path
-        path = raw_path.decode("ascii")
-        if "%" in path:
-            path = urllib.parse.unquote(path)
-        self.url = url
+    def send_400_response(self, msg: str):
+
+        content = [STATUS_LINE[400]]
+        for name, value in self.default_headers:
+            content.extend([name, b": ", value, b"\r\n"])
+        content.extend(
+            [
+                b"content-type: text/plain; charset=utf-8\r\n",
+                b"content-length: " + str(len(msg)).encode("ascii") + b"\r\n",
+                b"connection: close\r\n",
+                b"\r\n",
+                msg.encode("ascii"),
+            ]
+        )
+        self.transport.write(b"".join(content))
+        self.transport.close()
+
+    def on_message_begin(self):
+        self.url = b""
         self.expect_100_continue = False
         self.headers = []
         self.scope = {
@@ -197,13 +192,13 @@ class HttpToolsProtocol(asyncio.Protocol):
             "server": self.server,
             "client": self.client,
             "scheme": self.scheme,
-            "method": method.decode("ascii"),
             "root_path": self.root_path,
-            "path": path,
-            "raw_path": raw_path,
-            "query_string": parsed_url.query if parsed_url.query else b"",
             "headers": self.headers,
         }
+
+    # Parser callbacks
+    def on_url(self, url):
+        self.url += url
 
     def on_header(self, name: bytes, value: bytes):
         name = name.lower()
@@ -213,10 +208,20 @@ class HttpToolsProtocol(asyncio.Protocol):
 
     def on_headers_complete(self):
         http_version = self.parser.get_http_version()
+        method = self.parser.get_method()
+        self.scope["method"] = method.decode("ascii")
         if http_version != "1.1":
             self.scope["http_version"] = http_version
         if self.parser.should_upgrade():
             return
+        parsed_url = httptools.parse_url(self.url)
+        raw_path = parsed_url.path
+        path = raw_path.decode("ascii")
+        if "%" in path:
+            path = urllib.parse.unquote(path)
+        self.scope["path"] = path
+        self.scope["raw_path"] = raw_path
+        self.scope["query_string"] = parsed_url.query if parsed_url.query else b""
 
         # Handle 503 responses when 'limit_concurrency' is exceeded.
         if self.limit_concurrency is not None and (
