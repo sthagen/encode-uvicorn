@@ -8,7 +8,19 @@ import socket
 import ssl
 import sys
 from pathlib import Path
-from typing import Awaitable, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import (
+    TYPE_CHECKING,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
+
+from h11._connection import DEFAULT_MAX_INCOMPLETE_EVENT_SIZE
 
 from uvicorn._logging import TRACE_LOG_LEVEL
 
@@ -18,7 +30,6 @@ else:  # pragma: py-lt-38
     from typing import Literal
 
 import click
-from asgiref.typing import ASGIApplication
 
 try:
     import yaml
@@ -34,6 +45,9 @@ from uvicorn.middleware.debug import DebugMiddleware
 from uvicorn.middleware.message_logger import MessageLoggerMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from uvicorn.middleware.wsgi import WSGIMiddleware
+
+if TYPE_CHECKING:
+    from asgiref.typing import ASGIApplication
 
 HTTPProtocolType = Literal["auto", "h11", "httptools"]
 WSProtocolType = Literal["auto", "none", "websockets", "wsproto"]
@@ -194,7 +208,7 @@ def _normalize_dirs(dirs: Union[List[str], str, None]) -> List[str]:
 class Config:
     def __init__(
         self,
-        app: Union[ASGIApplication, Callable, str],
+        app: Union["ASGIApplication", Callable, str],
         host: str = "127.0.0.1",
         port: int = 8000,
         uds: Optional[str] = None,
@@ -240,6 +254,7 @@ class Config:
         ssl_ciphers: str = "TLSv1",
         headers: Optional[List[Tuple[str, str]]] = None,
         factory: bool = False,
+        h11_max_incomplete_event_size: int = DEFAULT_MAX_INCOMPLETE_EVENT_SIZE,
     ):
         self.app = app
         self.host = host
@@ -283,6 +298,7 @@ class Config:
         self.headers: List[Tuple[str, str]] = headers or []
         self.encoded_headers: List[Tuple[bytes, bytes]] = []
         self.factory = factory
+        self.h11_max_incomplete_event_size = h11_max_incomplete_event_size
 
         self.loaded = False
         self.configure_logging()
@@ -372,6 +388,10 @@ class Config:
     @property
     def is_ssl(self) -> bool:
         return bool(self.ssl_keyfile or self.ssl_certfile)
+
+    @property
+    def use_subprocess(self) -> bool:
+        return bool(self.reload or self.workers > 1)
 
     def configure_logging(self) -> None:
         logging.addLevelName(TRACE_LOG_LEVEL, "TRACE")
@@ -503,7 +523,7 @@ class Config:
     def setup_event_loop(self) -> None:
         loop_setup: Optional[Callable] = import_from_string(LOOP_SETUPS[self.loop])
         if loop_setup is not None:
-            loop_setup(reload=self.reload)
+            loop_setup(use_subprocess=self.use_subprocess)
 
     def bind_socket(self) -> socket.socket:
         logger_args: List[Union[str, int]]
