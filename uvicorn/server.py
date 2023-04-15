@@ -28,6 +28,8 @@ HANDLED_SIGNALS = (
     signal.SIGINT,  # Unix signal 2. Sent by Ctrl+C.
     signal.SIGTERM,  # Unix signal 15. Sent by `kill <pid>`.
 )
+if sys.platform == "win32":  # pragma: py-not-win32
+    HANDLED_SIGNALS += (signal.SIGBREAK,)  # Windows signal 21. Sent by Ctrl+Break.
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -309,7 +311,6 @@ class Server:
                 signal.signal(sig, self.handle_exit)
 
     def handle_exit(self, sig: int, frame: Optional[FrameType]) -> None:
-
         if self.should_exit and sig == signal.SIGINT:
             self.force_exit = True
         else:
