@@ -75,6 +75,7 @@ Using Uvicorn with watchfiles will enable the following options (which are other
 
 * `--workers <int>` - Number of worker processes. Defaults to the `$WEB_CONCURRENCY` environment variable if available, or 1. Not valid with `--reload`.
 * `--env-file <path>` - Environment configuration file for the ASGI application. **Default:** *None*.
+* `--timeout-worker-healthcheck <int>` - Maximum number of seconds to wait for a worker to respond to a healthcheck. **Default:** *5*.
 
 !!! note
     The `--reload` and `--workers` arguments are mutually exclusive. You cannot use both at the same time.
@@ -144,5 +145,5 @@ To understand more about the SSL context options, please refer to the [Python do
 
 ## Timeouts
 
-* `--timeout-keep-alive <int>` - Close Keep-Alive connections if no new data is received within this timeout. **Default:** *5*.
+* `--timeout-keep-alive <int>` - Close Keep-Alive connections if no new data is received within this timeout (in seconds). **Default:** *5*.
 * `--timeout-graceful-shutdown <int>` - Maximum number of seconds to wait for graceful shutdown. After this timeout, the server will start terminating requests.
