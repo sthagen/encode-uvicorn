@@ -135,6 +135,27 @@ async def test_request_than_limit_max_requests_warn_log(
     assert "Maximum request limit of 1 exceeded. Terminating process." in caplog.text
 
 
+async def test_limit_max_requests_jitter(
+    unused_tcp_port: int, http_protocol_cls: type[H11Protocol | HttpToolsProtocol], caplog: pytest.LogCaptureFixture
+):
+    caplog.set_level(logging.INFO, logger="uvicorn.error")
+    config = Config(
+        app=app, limit_max_requests=1, limit_max_requests_jitter=2, port=unused_tcp_port, http=http_protocol_cls
+    )
+    server = Server(config=config)
+    limit = server.limit_max_requests
+    assert limit is not None
+    assert 1 <= limit <= 3
+    task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.01)
+    async with httpx.AsyncClient() as client:
+        for _ in range(limit + 1):
+            await client.get(f"http://127.0.0.1:{unused_tcp_port}")
+    await task
+    assert f"Maximum request limit of {limit} exceeded. Terminating process." in caplog.text
+
+
 @contextlib.asynccontextmanager
 async def server(*, app: ASGIApplication, port: int, http_protocol_cls: type[H11Protocol | HttpToolsProtocol]):
     config = Config(app=app, port=port, loop="asyncio", http=http_protocol_cls)

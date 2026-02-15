@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 import os
 import platform
+import random
 import signal
 import socket
 import sys
@@ -62,6 +64,12 @@ class Server:
         self.last_notified = 0.0
 
         self._captured_signals: list[int] = []
+
+    @functools.cached_property
+    def limit_max_requests(self) -> int | None:
+        if self.config.limit_max_requests is None:
+            return None
+        return self.config.limit_max_requests + random.randint(0, self.config.limit_max_requests_jitter)
 
     def run(self, sockets: list[socket.socket] | None = None) -> None:
         return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
@@ -253,7 +261,7 @@ class Server:
         if self.should_exit:
             return True
 
-        max_requests = self.config.limit_max_requests
+        max_requests = self.limit_max_requests
         if max_requests is not None and self.server_state.total_requests >= max_requests:
             logger.info("Maximum request limit of %d exceeded. Terminating process.", max_requests)
             return True
