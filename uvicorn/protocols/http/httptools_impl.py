@@ -5,6 +5,7 @@ import contextvars
 import http
 import logging
 import re
+import sys
 import urllib
 from asyncio.events import TimerHandle
 from collections import deque
@@ -291,9 +292,10 @@ class HttpToolsProtocol(asyncio.Protocol):
             # For the asyncio loop, we need to explicitly start with an empty context
             # as it can be polluted from previous ASGI runs.
             # See https://github.com/python/cpython/issues/140947 for details.
-            task = contextvars.Context().run(self.loop.create_task, self.cycle.run_asgi(app))
-            # TODO: Replace the line above with the line below for Python >= 3.11
-            # task = self.loop.create_task(self.cycle.run_asgi(app), context=contextvars.Context())
+            if sys.version_info >= (3, 11):  # pragma: py-lt-311
+                task = self.loop.create_task(self.cycle.run_asgi(app), context=contextvars.Context())
+            else:  # pragma: py-gte-311
+                task = contextvars.Context().run(self.loop.create_task, self.cycle.run_asgi(app))
             task.add_done_callback(self.tasks.discard)
             self.tasks.add(task)
         else:
