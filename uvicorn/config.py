@@ -407,6 +407,14 @@ class Config:
             logging.getLogger("uvicorn.access").handlers = []
             logging.getLogger("uvicorn.access").propagate = False
 
+    def load_app(self) -> Any:
+        """Import the app and return it. Exits on failure."""
+        try:
+            return import_from_string(self.app)
+        except ImportFromStringError as exc:
+            logger.error("Error loading ASGI app. %s" % exc)
+            sys.exit(1)
+
     def load(self) -> None:
         assert not self.loaded
 
@@ -445,11 +453,7 @@ class Config:
 
         self.lifespan_class = import_from_string(LIFESPAN[self.lifespan])
 
-        try:
-            self.loaded_app = import_from_string(self.app)
-        except ImportFromStringError as exc:
-            logger.error("Error loading ASGI app. %s" % exc)
-            sys.exit(1)
+        self.loaded_app = self.load_app()
 
         try:
             self.loaded_app = self.loaded_app()
