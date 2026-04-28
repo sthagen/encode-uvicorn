@@ -138,6 +138,8 @@ The [SSL context](https://docs.python.org/3/library/ssl.html#ssl.SSLContext) can
 
 To understand more about the SSL context options, please refer to the [Python documentation](https://docs.python.org/3/library/ssl.html).
 
+For advanced TLS scenarios that the flags above don't cover (e.g., mutual TLS, certificate pinning, custom `SSLContext.options`), pass an `ssl_context_factory` to `uvicorn.run()` or `Config`. See [Running with HTTPS](deployment/index.md#customizing-the-ssl-context) for details.
+
 ## Resource Limits
 
 * `--limit-concurrency <int>` - Maximum number of concurrent connections or tasks to allow, before issuing HTTP 503 responses. Useful for ensuring known memory usage patterns even under over-resourced loads.
