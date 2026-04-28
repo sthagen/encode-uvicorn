@@ -225,6 +225,7 @@ class Config:
         ssl_cert_reqs: int = ssl.CERT_NONE,
         ssl_ca_certs: str | os.PathLike[str] | None = None,
         ssl_ciphers: str = "TLSv1",
+        ssl_context_factory: Callable[[Config, Callable[[], ssl.SSLContext]], ssl.SSLContext] | None = None,
         headers: list[tuple[str, str]] | None = None,
         factory: bool = False,
         h11_max_incomplete_event_size: int | None = None,
@@ -272,6 +273,7 @@ class Config:
         self.ssl_cert_reqs = ssl_cert_reqs
         self.ssl_ca_certs = ssl_ca_certs
         self.ssl_ciphers = ssl_ciphers
+        self.ssl_context_factory = ssl_context_factory
         self.headers: list[tuple[str, str]] = headers or []
         self.encoded_headers: list[tuple[bytes, bytes]] = []
         self.factory = factory
@@ -357,7 +359,7 @@ class Config:
 
     @property
     def is_ssl(self) -> bool:
-        return bool(self.ssl_keyfile or self.ssl_certfile)
+        return bool(self.ssl_keyfile or self.ssl_certfile or self.ssl_context_factory)
 
     @property
     def use_subprocess(self) -> bool:
@@ -407,12 +409,43 @@ class Config:
             logging.getLogger("uvicorn.access").handlers = []
             logging.getLogger("uvicorn.access").propagate = False
 
+    def load_app(self) -> Any:
+        """Import the app and return it. Exits on failure."""
+        try:
+            return import_from_string(self.app)
+        except ImportFromStringError as exc:
+            logger.error("Error loading ASGI app. %s" % exc)
+            sys.exit(1)
+
     def load(self) -> None:
         assert not self.loaded
 
-        if self.is_ssl:
+        if self.ssl_context_factory is not None:
+
+            def default_factory() -> ssl.SSLContext:
+                if not self.ssl_certfile:
+                    raise RuntimeError(
+                        "`default_ssl_context_factory()` requires `ssl_certfile` to be set on `Config`. "
+                        "Either pass `ssl_certfile` (and optionally `ssl_keyfile`) or build the `SSLContext` "
+                        "directly inside `ssl_context_factory` without calling the default factory."
+                    )
+                return create_ssl_context(
+                    keyfile=self.ssl_keyfile,
+                    certfile=self.ssl_certfile,
+                    password=self.ssl_keyfile_password,
+                    ssl_version=self.ssl_version,
+                    cert_reqs=self.ssl_cert_reqs,
+                    ca_certs=self.ssl_ca_certs,
+                    ciphers=self.ssl_ciphers,
+                )
+
+            context = self.ssl_context_factory(self, default_factory)
+            if not isinstance(context, ssl.SSLContext):
+                raise TypeError(f"`ssl_context_factory` must return an `ssl.SSLContext`, got {type(context).__name__}")
+            self.ssl: ssl.SSLContext | None = context
+        elif self.is_ssl:
             assert self.ssl_certfile
-            self.ssl: ssl.SSLContext | None = create_ssl_context(
+            self.ssl = create_ssl_context(
                 keyfile=self.ssl_keyfile,
                 certfile=self.ssl_certfile,
                 password=self.ssl_keyfile_password,
@@ -445,11 +478,7 @@ class Config:
 
         self.lifespan_class = import_from_string(LIFESPAN[self.lifespan])
 
-        try:
-            self.loaded_app = import_from_string(self.app)
-        except ImportFromStringError as exc:
-            logger.error("Error loading ASGI app. %s" % exc)
-            sys.exit(1)
+        self.loaded_app = self.load_app()
 
         try:
             self.loaded_app = self.loaded_app()
