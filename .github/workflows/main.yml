@@ -53,7 +53,7 @@ jobs:
         shell: bash
 
   docs-preview:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
 
     permissions:
@@ -79,7 +79,7 @@ jobs:
         run: scripts/install
 
       - name: Build docs
-        run: uv run mkdocs build
+        run: uv run zensical build
 
       - name: Deploy preview to Cloudflare Pages
         id: deploy
