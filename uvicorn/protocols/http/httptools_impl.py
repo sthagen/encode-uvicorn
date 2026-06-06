@@ -70,6 +70,7 @@ class HttpToolsProtocol(asyncio.Protocol):
 
         self.ws_protocol_class = config.ws_protocol_class
         self.root_path = config.root_path
+        self.asgi_version = config.asgi_version
         self.limit_concurrency = config.limit_concurrency
         self.app_state = app_state
 
@@ -224,7 +225,7 @@ class HttpToolsProtocol(asyncio.Protocol):
         self.headers = []
         self.scope = {  # type: ignore[typeddict-item]
             "type": "http",
-            "asgi": {"version": self.config.asgi_version, "spec_version": "2.3"},
+            "asgi": {"version": self.asgi_version, "spec_version": "2.3"},
             "http_version": "1.1",
             "server": self.server,
             "client": self.client,
