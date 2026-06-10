@@ -219,19 +219,19 @@ class WebSocketsSansIOProtocol(asyncio.Protocol):
         self.tasks.add(task)
 
     def handle_cont(self, event: Frame) -> None:
-        self.frames.append(event.data)
+        self.frames.append(event.data)  # type: ignore[arg-type]
         if event.fin:
             self.send_receive_event_to_app()
 
     def handle_text(self, event: Frame) -> None:
         self.curr_msg_data_type = "text"
-        self.frames = [event.data]
+        self.frames = [event.data]  # type: ignore[list-item]
         if event.fin:
             self.send_receive_event_to_app()
 
     def handle_bytes(self, event: Frame) -> None:
         self.curr_msg_data_type = "bytes"
-        self.frames = [event.data]
+        self.frames = [event.data]  # type: ignore[list-item]
         if event.fin:
             self.send_receive_event_to_app()
 
