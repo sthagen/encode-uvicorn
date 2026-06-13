@@ -14,8 +14,7 @@ from configparser import RawConfigParser
 from pathlib import Path
 from typing import IO, Any, Literal
 
-import click
-
+from uvicorn._ansi import style
 from uvicorn._compat import iscoroutinefunction
 from uvicorn._types import ASGIApplication
 from uvicorn.importer import ImportFromStringError, import_from_string
@@ -24,6 +23,17 @@ from uvicorn.middleware.asgi2 import ASGI2Middleware
 from uvicorn.middleware.message_logger import MessageLoggerMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from uvicorn.middleware.wsgi import WSGIMiddleware
+
+
+class UvicornDeprecationWarning(UserWarning):
+    """A custom deprecation warning for Uvicorn.
+
+    Unlike the built-in DeprecationWarning, this inherits from UserWarning to ensure it is visible by default, helping
+    users discover deprecated features without needing to enable warnings explicitly.
+
+    Reference: https://sethmlarson.dev/deprecations-via-warnings-dont-work-for-python-libraries
+    """
+
 
 HTTPProtocolType = Literal["auto", "h11", "httptools"]
 WSProtocolType = Literal["auto", "none", "websockets", "websockets-sansio", "wsproto"]
@@ -550,13 +560,13 @@ class Config:
 
             message = "Uvicorn running on unix socket %s (Press CTRL+C to quit)"
             sock_name_format = "%s"
-            color_message = "Uvicorn running on " + click.style(sock_name_format, bold=True) + " (Press CTRL+C to quit)"
+            color_message = "Uvicorn running on " + style(sock_name_format, bold=True) + " (Press CTRL+C to quit)"
             logger_args = [self.uds]
         elif self.fd is not None:  # pragma: py-win32
             sock = socket.fromfd(self.fd, socket.AF_UNIX, socket.SOCK_STREAM)
             message = "Uvicorn running on socket %s (Press CTRL+C to quit)"
             fd_name_format = "%s"
-            color_message = "Uvicorn running on " + click.style(fd_name_format, bold=True) + " (Press CTRL+C to quit)"
+            color_message = "Uvicorn running on " + style(fd_name_format, bold=True) + " (Press CTRL+C to quit)"
             logger_args = [sock.getsockname()]
         else:
             family = socket.AF_INET
@@ -576,7 +586,7 @@ class Config:
                 sys.exit(1)
 
             message = f"Uvicorn running on {addr_format} (Press CTRL+C to quit)"
-            color_message = "Uvicorn running on " + click.style(addr_format, bold=True) + " (Press CTRL+C to quit)"
+            color_message = "Uvicorn running on " + style(addr_format, bold=True) + " (Press CTRL+C to quit)"
             protocol_name = "https" if self.is_ssl else "http"
             logger_args = [protocol_name, self.host, sock.getsockname()[1]]
         logger.info(message, *logger_args, extra={"color_message": color_message})
