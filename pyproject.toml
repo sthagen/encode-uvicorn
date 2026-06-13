@@ -73,7 +73,7 @@ dev = [
     "wsproto==1.3.2",
 ]
 docs = [
-    "zensical==0.0.43",
+    "zensical==0.0.44",
     "mkdocstrings-python>=2.0.3",
 ]
 
