@@ -4,7 +4,7 @@ import asyncio
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, TypeAlias, TypedDict
 
-import httpx
+import httpx2
 import pytest
 import websockets.exceptions
 from websockets import __version__ as websockets_version
@@ -82,7 +82,7 @@ async def wsresponse(url: str):
         "Sec-WebSocket-Key": "x3JJHMbDL1EzLkh9GBhXDw==",
         "Sec-WebSocket-Version": "13",
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx2.AsyncClient() as client:
         return await client.get(url, headers=headers)
 
 
@@ -92,7 +92,7 @@ async def test_invalid_upgrade(ws_protocol_cls: WSProtocol, http_protocol_cls: H
 
     config = Config(app=app, ws=ws_protocol_cls, http=http_protocol_cls, port=unused_tcp_port)
     async with run_server(config):
-        async with httpx.AsyncClient() as client:
+        async with httpx2.AsyncClient() as client:
             response = await client.get(
                 f"http://127.0.0.1:{unused_tcp_port}",
                 headers={
@@ -603,7 +603,7 @@ async def test_connection_lost_before_handshake_complete(
         disconnect_message = await receive()  # type: ignore
 
     async def websocket_session(uri: str):
-        async with httpx.AsyncClient() as client:
+        async with httpx2.AsyncClient() as client:
             await client.get(
                 f"http://127.0.0.1:{unused_tcp_port}",
                 headers={
@@ -1252,7 +1252,8 @@ async def test_default_server_headers(
     config = Config(app=App, ws=ws_protocol_cls, http=http_protocol_cls, lifespan="off", port=unused_tcp_port)
     async with run_server(config):
         headers = await open_connection(f"ws://127.0.0.1:{unused_tcp_port}")
-        assert headers.get("server") == "uvicorn" and "date" in headers
+        assert headers.get("server") == "uvicorn"
+        assert len(headers.get_all("date")) == 1
 
 
 async def test_no_server_headers(ws_protocol_cls: WSProtocol, http_protocol_cls: HTTPProtocol, unused_tcp_port: int):
@@ -1278,8 +1279,7 @@ async def test_no_server_headers(ws_protocol_cls: WSProtocol, http_protocol_cls:
         assert "server" not in headers
 
 
-@skip_if_no_wsproto
-async def test_no_date_header_on_wsproto(http_protocol_cls: HTTPProtocol, unused_tcp_port: int):
+async def test_no_date_header(ws_protocol_cls: WSProtocol, http_protocol_cls: HTTPProtocol, unused_tcp_port: int):
     class App(WebSocketResponse):
         async def websocket_connect(self, message: WebSocketConnectEvent):
             await self.send({"type": "websocket.accept"})
@@ -1291,7 +1291,7 @@ async def test_no_date_header_on_wsproto(http_protocol_cls: HTTPProtocol, unused
 
     config = Config(
         app=App,
-        ws=_WSProtocol,
+        ws=ws_protocol_cls,
         http=http_protocol_cls,
         lifespan="off",
         date_header=False,
