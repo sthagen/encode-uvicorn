@@ -156,6 +156,27 @@ async def app(scope, receive, send):
     print(f"HTTP Version: {scope['http_version']}")  # "2" for HTTP/2
 ```
 
+## Early Hints
+
+Uvicorn advertises the `http.response.early_hint` ASGI extension for HTTP/2 requests. You can send one or more
+`103 Early Hints` responses before the final response:
+
+```python title="main.py"
+async def app(scope, receive, send):
+    if "http.response.early_hint" in scope.get("extensions", {}):
+        await send(
+            {
+                "type": "http.response.early_hint",
+                "links": [b"</style.css>; rel=preload; as=style"],
+            }
+        )
+
+    await send({"type": "http.response.start", "status": 200, "headers": []})
+    await send({"type": "http.response.body", "body": b"ok"})
+```
+
+Each value in `links` becomes a separate `Link` header in the `103` response.
+
 ## Using with Reverse Proxies
 
 In production, Uvicorn is typically deployed behind a reverse proxy like Nginx, Caddy, or HAProxy.
@@ -206,6 +227,39 @@ HTTP/2 provides the most benefit when:
 For internal, low-latency connections (like proxy to backend), HTTP/1.1 with keepalive often
 performs comparably to HTTP/2. It is simpler to configure and debug, which is why it remains the
 recommended default for most deployments.
+
+## Response Trailers
+
+Trailers are headers you send after the response body. You can use them for values that
+become available while streaming, such as a checksum or final processing statistics,
+without buffering the entire response first.
+
+They also let you serve ASGI applications that implement
+[gRPC](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md), which reports
+call results through `grpc-status` and optional `grpc-message` trailers.
+
+```python
+import uvicorn
+
+
+async def app(scope, receive, send):
+    trailers = "http.response.trailers" in scope.get("extensions", {})
+    await send({"type": "http.response.start", "status": 200, "trailers": trailers})
+    await send({"type": "http.response.body", "body": b"Hello, world!"})
+    if trailers:
+        await send({
+            "type": "http.response.trailers",
+            "headers": [(b"x-result", b"ok")],
+            "more_trailers": False,
+        })
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, http="zttp", http2=True, lifespan="off")
+```
+
+Your client must send `TE: trailers` to receive them. Set `more_trailers=True`
+to send more than one trailer message; Uvicorn combines their headers and completes the response on the last message.
 
 ## Current Limitations
 
