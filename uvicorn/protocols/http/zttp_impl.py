@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
-import sys
 from collections.abc import Callable
 from typing import Any, Literal
 from urllib.parse import unquote
@@ -201,10 +200,7 @@ class ZttpProtocol(asyncio.Protocol):
                     self.cycle.more_body = False
                     self.cycle.message_event.set()
                 if self.config.reset_contextvars:
-                    if sys.version_info >= (3, 11):  # pragma: py-lt-311
-                        task = self.loop.create_task(self.cycle.run_asgi(app), context=contextvars.Context())
-                    else:  # pragma: py-gte-311
-                        task = contextvars.Context().run(self.loop.create_task, self.cycle.run_asgi(app))
+                    task = self.loop.create_task(self.cycle.run_asgi(app), context=contextvars.Context())
                 else:
                     task = self.loop.create_task(self.cycle.run_asgi(app))
                 task.add_done_callback(self.tasks.discard)
@@ -247,8 +243,8 @@ class ZttpProtocol(asyncio.Protocol):
             app_state=self.app_state,
         )
         protocol.connection_made(self.transport)
-        protocol.data_received(bytes(output))
         self.transport.set_protocol(protocol)
+        protocol.data_received(bytes(output))
 
     def send_400_response(self, msg: str) -> None:
         body = msg.encode("ascii")
